@@ -6,27 +6,24 @@ function App() {
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
 
-  // State untuk Form Input Transaksi
+  // State Form
   const [showModal, setShowModal] = useState(false)
   const [amount, setAmount] = useState('')
   const [type, setType] = useState('expense')
   const [categoryId, setCategoryId] = useState('')
   const [description, setDescription] = useState('')
 
-  // Ambil data saat aplikasi pertama kali dimuat
   useEffect(() => {
     fetchCategories()
     fetchTransactions()
   }, [])
 
-  // 1. Ambil daftar kategori dari Supabase
   const fetchCategories = async () => {
     const { data, error } = await supabase.from('categories').select('*')
     if (error) console.error('Error fetching categories:', error)
     else setCategories(data || [])
   }
 
-  // 2. Ambil daftar transaksi dari Supabase
   const fetchTransactions = async () => {
     setLoading(true)
     const { data, error } = await supabase
@@ -39,7 +36,6 @@ function App() {
     setLoading(false)
   }
 
-  // 3. Simpan transaksi baru ke Supabase
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!amount || !type) return alert('Mohon isi nominal dan tipe transaksi!')
@@ -56,17 +52,29 @@ function App() {
     if (error) {
       alert('Gagal menyimpan transaksi: ' + error.message)
     } else {
-      // Reset form & tutup modal
       setAmount('')
       setDescription('')
       setCategoryId('')
       setShowModal(false)
-      // Refresh daftar transaksi
       fetchTransactions()
     }
   }
 
-  // Kalkulasi Ringkasan Keuangan
+  // FUNGSI BARU: Hapus Transaksi
+  const handleDelete = async (id) => {
+    const confirmDelete = window.confirm('Apakah Anda yakin ingin menghapus transaksi ini?')
+    if (!confirmDelete) return
+
+    const { error } = await supabase.from('transactions').delete().eq('id', id)
+
+    if (error) {
+      alert('Gagal menghapus: ' + error.message)
+    } else {
+      fetchTransactions() // Reload data transaksi setelah dihapus
+    }
+  }
+
+  // Kalkulasi
   const totalIncome = transactions
     .filter((t) => t.type === 'income')
     .reduce((acc, curr) => acc + Number(curr.amount), 0)
@@ -77,7 +85,6 @@ function App() {
 
   const balance = totalIncome - totalExpense
 
-  // Format ke Rupiah
   const formatRupiah = (number) => {
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
@@ -86,7 +93,6 @@ function App() {
     }).format(number)
   }
 
-  // Filter kategori berdasarkan tipe yang dipilih di form
   const filteredCategories = categories.filter((c) => c.type === type)
 
   return (
@@ -101,7 +107,7 @@ function App() {
         </button>
       </header>
 
-      {/* Cards Ringkasan Saldo */}
+      {/* Cards Ringkasan */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '30px' }}>
         <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
           <small style={{ color: '#64748b' }}>Total Saldo</small>
@@ -117,7 +123,7 @@ function App() {
         </div>
       </div>
 
-      {/* Tabel Riwayat Transaksi */}
+      {/* Tabel Riwayat */}
       <h3>Riwayat Transaksi</h3>
       {loading ? (
         <p>Memuat data...</p>
@@ -131,6 +137,7 @@ function App() {
               <th style={{ padding: '10px' }}>Kategori</th>
               <th style={{ padding: '10px' }}>Catatan</th>
               <th style={{ padding: '10px', textAlign: 'right' }}>Nominal</th>
+              <th style={{ padding: '10px', textAlign: 'center' }}>Aksi</th>
             </tr>
           </thead>
           <tbody>
@@ -142,13 +149,21 @@ function App() {
                 <td style={{ padding: '10px', textAlign: 'right', fontWeight: 'bold', color: item.type === 'income' ? '#16a34a' : '#dc2626' }}>
                   {item.type === 'income' ? '+' : '-'} {formatRupiah(item.amount)}
                 </td>
+                <td style={{ padding: '10px', textAlign: 'center' }}>
+                  <button
+                    onClick={() => handleDelete(item.id)}
+                    style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
+                  >
+                    Hapus
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
 
-      {/* Modal / Pop-up Input Transaksi */}
+      {/* Modal Input */}
       {showModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <div style={{ background: '#fff', padding: '25px', borderRadius: '8px', width: '100%', maxWidth: '400px' }}>
