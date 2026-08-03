@@ -14,7 +14,11 @@ import {
   BarChart2,
   Search,
   Filter,
-  RotateCcw
+  RotateCcw,
+  Target,
+  AlertTriangle,
+  CheckCircle2,
+  Sliders
 } from 'lucide-react'
 import { 
   ResponsiveContainer, 
@@ -56,18 +60,30 @@ function App() {
   const [selectedMonth, setSelectedMonth] = useState('all')
   const [selectedYear, setSelectedYear] = useState('all')
 
-  // State Modal & Form (Tambah / Edit)
+  // State Modal & Form (Tambah / Edit Transaksi)
   const [showModal, setShowModal] = useState(false)
-  const [editingTransaction, setEditingTransaction] = useState(null) // null = Mode Tambah, Object = Mode Edit
+  const [editingTransaction, setEditingTransaction] = useState(null)
   const [amount, setAmount] = useState('')
   const [type, setType] = useState('expense')
   const [categoryId, setCategoryId] = useState('')
   const [description, setDescription] = useState('')
 
+  // State Batas Anggaran (Monthly Budgeting)
+  const [monthlyBudget, setMonthlyBudget] = useState(3000000) // Default 3 Juta
+  const [showBudgetModal, setShowBudgetModal] = useState(false)
+  const [inputBudget, setInputBudget] = useState('')
+
   useEffect(() => {
     fetchCategories()
     fetchTransactions()
   }, [])
+
+  // Muat Anggaran dari LocalStorage saat Filter Bulan/Tahun Berubah
+  useEffect(() => {
+    const budgetKey = `budget_${selectedYear}_${selectedMonth}`
+    const savedBudget = localStorage.getItem(budgetKey) || localStorage.getItem('master_monthly_budget') || '3000000'
+    setMonthlyBudget(Number(savedBudget))
+  }, [selectedMonth, selectedYear])
 
   const fetchCategories = async () => {
     const { data, error } = await supabase.from('categories').select('*')
@@ -87,7 +103,7 @@ function App() {
     setLoading(false)
   }
 
-  // Buka Modal untuk Tambah Transaksi Baru
+  // Buka Modal Tambah Transaksi
   const handleOpenCreateModal = () => {
     setEditingTransaction(null)
     setAmount('')
@@ -97,7 +113,7 @@ function App() {
     setShowModal(true)
   }
 
-  // Buka Modal untuk Edit Transaksi yang Ada
+  // Buka Modal Edit Transaksi
   const handleOpenEditModal = (item) => {
     setEditingTransaction(item)
     setAmount(item.amount)
@@ -107,6 +123,7 @@ function App() {
     setShowModal(true)
   }
 
+  // Handle Simpan Transaksi (Tambah / Update)
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!amount || !type) return alert('Mohon isi nominal dan tipe transaksi!')
@@ -119,25 +136,21 @@ function App() {
     }
 
     if (editingTransaction) {
-      // MODE EDIT / UPDATE
       const { error } = await supabase
         .from('transactions')
         .update(payload)
         .eq('id', editingTransaction.id)
 
-      if (error) {
-        alert('Gagal memperbarui transaksi: ' + error.message)
-      } else {
+      if (error) alert('Gagal memperbarui transaksi: ' + error.message)
+      else {
         setShowModal(false)
         fetchTransactions()
       }
     } else {
-      // MODE TAMBAH / INSERT
       const { error } = await supabase.from('transactions').insert([payload])
 
-      if (error) {
-        alert('Gagal menyimpan transaksi: ' + error.message)
-      } else {
+      if (error) alert('Gagal menyimpan transaksi: ' + error.message)
+      else {
         setShowModal(false)
         fetchTransactions()
       }
@@ -150,6 +163,19 @@ function App() {
       if (error) alert('Gagal menghapus: ' + error.message)
       else fetchTransactions()
     }
+  }
+
+  // Handle Simpan Target Anggaran Bulanan
+  const handleSaveBudget = (e) => {
+    e.preventDefault()
+    const num = parseFloat(inputBudget)
+    if (isNaN(num) || num < 0) return alert('Masukkan nominal anggaran yang valid!')
+
+    setMonthlyBudget(num)
+    const budgetKey = `budget_${selectedYear}_${selectedMonth}`
+    localStorage.setItem(budgetKey, num.toString())
+    localStorage.setItem('master_monthly_budget', num.toString())
+    setShowBudgetModal(false)
   }
 
   // Dapatkan daftar tahun unik
@@ -185,6 +211,25 @@ function App() {
     .reduce((acc, curr) => acc + Number(curr.amount), 0)
 
   const balance = totalIncome - totalExpense
+
+  // Kalkulasi Target Budget
+  const budgetPercentage = monthlyBudget > 0 ? Math.round((totalExpense / monthlyBudget) * 100) : 0
+  const remainingBudget = monthlyBudget - totalExpense
+
+  // Warna Progress Bar berdasarkan penggunaan anggaran
+  let budgetColorClass = 'bg-emerald-500'
+  let budgetBadgeColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+  let budgetStatusText = 'Anggaran Aman'
+
+  if (budgetPercentage >= 95) {
+    budgetColorClass = 'bg-rose-500'
+    budgetBadgeColor = 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+    budgetStatusText = budgetPercentage > 100 ? 'Melebihi Anggaran!' : 'Batas Limit Krusial'
+  } else if (budgetPercentage >= 75) {
+    budgetColorClass = 'bg-amber-500'
+    budgetBadgeColor = 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+    budgetStatusText = 'Mendekati Limit'
+  }
 
   const formatRupiah = (number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -326,6 +371,72 @@ function App() {
           </div>
         </div>
 
+        {/* SEKSI BATAS ANGGARAN BULANAN (MONTHLY BUDGETING) */}
+        <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700/50 shadow-xl space-y-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-blue-500/10 rounded-xl text-blue-400 border border-blue-500/20">
+                <Target className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-white">Target Anggaran Pengeluaran</h3>
+                <p className="text-xs text-slate-400">Kontrol batas pengeluaran bulanan Anda</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className={`text-xs px-3 py-1 rounded-full border font-medium ${budgetBadgeColor}`}>
+                {budgetStatusText} ({budgetPercentage}%)
+              </span>
+              <button
+                onClick={() => {
+                  setInputBudget(monthlyBudget.toString())
+                  setShowBudgetModal(true)
+                }}
+                className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 px-3 py-1.5 rounded-xl border border-blue-500/20 transition-all font-medium"
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                Atur Anggaran
+              </button>
+            </div>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="space-y-2">
+            <div className="w-full bg-slate-900 rounded-full h-3.5 overflow-hidden p-0.5 border border-slate-700/50">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${budgetColorClass}`}
+                style={{ width: `${Math.min(budgetPercentage, 100)}%` }}
+              ></div>
+            </div>
+
+            <div className="flex justify-between items-center text-xs font-medium text-slate-400 pt-1">
+              <span>Pengeluaran: <strong className="text-white">{formatRupiah(totalExpense)}</strong></span>
+              <span>Target: <strong className="text-white">{formatRupiah(monthlyBudget)}</strong></span>
+            </div>
+          </div>
+
+          {/* Info Sisa / Over Budget Banner */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pt-2 border-t border-slate-700/40 gap-2 text-xs">
+            <div className="text-slate-400">
+              {remainingBudget >= 0 ? (
+                <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Sisa Anggaran: {formatRupiah(remainingBudget)}
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 text-rose-400 font-semibold">
+                  <AlertTriangle className="w-4 h-4" />
+                  Peringatan: Melebihi anggaran sebesar {formatRupiah(Math.abs(remainingBudget))}
+                </span>
+              )}
+            </div>
+            <span className="text-slate-500 italic">
+              *Tersimpan otomatis per periode filter
+            </span>
+          </div>
+        </div>
+
         {/* Visualisasi Grafik Section */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
@@ -445,7 +556,6 @@ function App() {
                       </td>
                       <td className="p-4 text-center">
                         <div className="flex items-center justify-center gap-1">
-                          {/* Tombol Edit */}
                           <button
                             onClick={() => handleOpenEditModal(item)}
                             className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
@@ -454,7 +564,6 @@ function App() {
                             <Pencil className="w-4 h-4" />
                           </button>
                           
-                          {/* Tombol Hapus */}
                           <button
                             onClick={() => handleDelete(item.id)}
                             className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
@@ -472,7 +581,7 @@ function App() {
           )}
         </div>
 
-        {/* Modal Form (Tambah / Edit) */}
+        {/* Modal Form Transaksi (Tambah / Edit) */}
         {showModal && (
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex justify-center items-center p-4 z-50">
             <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
@@ -569,6 +678,61 @@ function App() {
                     className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-semibold shadow-lg shadow-blue-600/20 transition-all"
                   >
                     {editingTransaction ? 'Simpan Perubahan' : 'Simpan Transaksi'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Form Set Target Budget */}
+        {showBudgetModal && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex justify-center items-center p-4 z-50">
+            <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex justify-between items-center border-b border-slate-700 pb-4">
+                <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                  <Target className="w-5 h-5 text-blue-400" />
+                  Atur Target Anggaran
+                </h3>
+                <button 
+                  onClick={() => setShowBudgetModal(false)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-700"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveBudget} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                    Batas Maksimal Pengeluaran (Rp)
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="Contoh: 3000000"
+                    value={inputBudget}
+                    onChange={(e) => setInputBudget(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors"
+                    required
+                  />
+                  <p className="text-xs text-slate-500 mt-2">
+                    Batas ini akan digunakan sebagai indikator peringatan pengeluaran pada periode terpilih.
+                  </p>
+                </div>
+
+                <div className="flex gap-3 justify-end pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowBudgetModal(false)}
+                    className="px-4 py-2.5 rounded-xl text-slate-400 hover:bg-slate-700 text-sm font-semibold transition-colors"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-semibold shadow-lg shadow-blue-600/20 transition-all"
+                  >
+                    Simpan Target
                   </button>
                 </div>
               </form>
