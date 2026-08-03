@@ -18,7 +18,9 @@ import {
   Target,
   AlertTriangle,
   CheckCircle2,
-  Sliders
+  Sliders,
+  Tags,
+  Plus
 } from 'lucide-react'
 import { 
   ResponsiveContainer, 
@@ -69,9 +71,15 @@ function App() {
   const [description, setDescription] = useState('')
 
   // State Batas Anggaran (Monthly Budgeting)
-  const [monthlyBudget, setMonthlyBudget] = useState(3000000) // Default 3 Juta
+  const [monthlyBudget, setMonthlyBudget] = useState(3000000)
   const [showBudgetModal, setShowBudgetModal] = useState(false)
   const [inputBudget, setInputBudget] = useState('')
+
+  // State Kelola Kategori Mandiri (Custom Categories)
+  const [showCategoryModal, setShowCategoryModal] = useState(false)
+  const [catName, setCatName] = useState('')
+  const [catType, setCatType] = useState('expense')
+  const [editingCategory, setEditingCategory] = useState(null)
 
   useEffect(() => {
     fetchCategories()
@@ -86,7 +94,11 @@ function App() {
   }, [selectedMonth, selectedYear])
 
   const fetchCategories = async () => {
-    const { data, error } = await supabase.from('categories').select('*')
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .order('name', { ascending: true })
+
     if (error) console.error('Error fetching categories:', error)
     else setCategories(data || [])
   }
@@ -103,7 +115,7 @@ function App() {
     setLoading(false)
   }
 
-  // Buka Modal Tambah Transaksi
+  // Buka Modal Transaksi
   const handleOpenCreateModal = () => {
     setEditingTransaction(null)
     setAmount('')
@@ -113,7 +125,6 @@ function App() {
     setShowModal(true)
   }
 
-  // Buka Modal Edit Transaksi
   const handleOpenEditModal = (item) => {
     setEditingTransaction(item)
     setAmount(item.amount)
@@ -165,7 +176,7 @@ function App() {
     }
   }
 
-  // Handle Simpan Target Anggaran Bulanan
+  // Handle Simpan Target Anggaran
   const handleSaveBudget = (e) => {
     e.preventDefault()
     const num = parseFloat(inputBudget)
@@ -176,6 +187,71 @@ function App() {
     localStorage.setItem(budgetKey, num.toString())
     localStorage.setItem('master_monthly_budget', num.toString())
     setShowBudgetModal(false)
+  }
+
+  // --- KELOLA KATEGORI LOGIC ---
+  const handleOpenCategoryModal = () => {
+    setCatName('')
+    setCatType('expense')
+    setEditingCategory(null)
+    setShowCategoryModal(true)
+  }
+
+  const handleEditCategoryClick = (cat) => {
+    setEditingCategory(cat)
+    setCatName(cat.name)
+    setCatType(cat.type)
+  }
+
+  const handleCancelCategoryEdit = () => {
+    setEditingCategory(null)
+    setCatName('')
+    setCatType('expense')
+  }
+
+  const handleSaveCategory = async (e) => {
+    e.preventDefault()
+    if (!catName.trim()) return alert('Nama kategori tidak boleh kosong!')
+
+    if (editingCategory) {
+      // Update Kategori
+      const { error } = await supabase
+        .from('categories')
+        .update({ name: catName.trim(), type: catType })
+        .eq('id', editingCategory.id)
+
+      if (error) {
+        alert('Gagal mengedit kategori: ' + error.message)
+      } else {
+        handleCancelCategoryEdit()
+        fetchCategories()
+        fetchTransactions() // refresh jika nama kategori di transaksi terpengaruh
+      }
+    } else {
+      // Tambah Kategori Baru
+      const { error } = await supabase
+        .from('categories')
+        .insert([{ name: catName.trim(), type: catType }])
+
+      if (error) {
+        alert('Gagal menambah kategori: ' + error.message)
+      } else {
+        setCatName('')
+        fetchCategories()
+      }
+    }
+  }
+
+  const handleDeleteCategory = async (id) => {
+    if (window.confirm('Hapus kategori ini? Transaksi yang menggunakan kategori ini mungkin kehilangan label kategorinya.')) {
+      const { error } = await supabase.from('categories').delete().eq('id', id)
+      if (error) {
+        alert('Gagal menghapus kategori (mungkin masih digunakan oleh transaksi): ' + error.message)
+      } else {
+        fetchCategories()
+        fetchTransactions()
+      }
+    }
   }
 
   // Dapatkan daftar tahun unik
@@ -216,7 +292,6 @@ function App() {
   const budgetPercentage = monthlyBudget > 0 ? Math.round((totalExpense / monthlyBudget) * 100) : 0
   const remainingBudget = monthlyBudget - totalExpense
 
-  // Warna Progress Bar berdasarkan penggunaan anggaran
   let budgetColorClass = 'bg-emerald-500'
   let budgetBadgeColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
   let budgetStatusText = 'Anggaran Aman'
@@ -280,13 +355,23 @@ function App() {
             </h1>
             <p className="text-sm text-slate-400 mt-1">Pantau pemasukan dan pengeluaran harian Anda</p>
           </div>
-          <button
-            onClick={handleOpenCreateModal}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold px-4 py-2.5 rounded-xl transition-all shadow-lg shadow-blue-600/20 active:scale-95"
-          >
-            <PlusCircle className="w-5 h-5" />
-            Tambah Transaksi
-          </button>
+          
+          <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+            <button
+              onClick={handleOpenCategoryModal}
+              className="flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-semibold px-4 py-2.5 rounded-xl transition-all border border-slate-600 active:scale-95 flex-1 sm:flex-none"
+            >
+              <Tags className="w-4 h-4 text-amber-400" />
+              Kelola Kategori
+            </button>
+            <button
+              onClick={handleOpenCreateModal}
+              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-all shadow-lg shadow-blue-600/20 active:scale-95 flex-1 sm:flex-none"
+            >
+              <PlusCircle className="w-4 h-4" />
+              Tambah Transaksi
+            </button>
+          </div>
         </header>
 
         {/* Filter & Search Toolbar */}
@@ -371,7 +456,7 @@ function App() {
           </div>
         </div>
 
-        {/* SEKSI BATAS ANGGARAN BULANAN (MONTHLY BUDGETING) */}
+        {/* Seksi Batas Anggaran Bulanan */}
         <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700/50 shadow-xl space-y-4">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <div className="flex items-center gap-2.5">
@@ -401,7 +486,6 @@ function App() {
             </div>
           </div>
 
-          {/* Progress Bar */}
           <div className="space-y-2">
             <div className="w-full bg-slate-900 rounded-full h-3.5 overflow-hidden p-0.5 border border-slate-700/50">
               <div
@@ -416,7 +500,6 @@ function App() {
             </div>
           </div>
 
-          {/* Info Sisa / Over Budget Banner */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pt-2 border-t border-slate-700/40 gap-2 text-xs">
             <div className="text-slate-400">
               {remainingBudget >= 0 ? (
@@ -439,8 +522,6 @@ function App() {
 
         {/* Visualisasi Grafik Section */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          
-          {/* Pie Chart */}
           <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700/50 shadow-xl flex flex-col justify-between">
             <h3 className="text-base font-semibold text-white flex items-center gap-2 mb-4">
               <PieChartIcon className="w-5 h-5 text-rose-400" />
@@ -478,7 +559,6 @@ function App() {
             )}
           </div>
 
-          {/* Bar Chart */}
           <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700/50 shadow-xl flex flex-col justify-between">
             <h3 className="text-base font-semibold text-white flex items-center gap-2 mb-4">
               <BarChart2 className="w-5 h-5 text-blue-400" />
@@ -503,7 +583,6 @@ function App() {
               </ResponsiveContainer>
             </div>
           </div>
-
         </div>
 
         {/* Tabel Riwayat Transaksi */}
@@ -581,7 +660,7 @@ function App() {
           )}
         </div>
 
-        {/* Modal Form Transaksi (Tambah / Edit) */}
+        {/* Modal Transaksi (Tambah / Edit) */}
         {showModal && (
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex justify-center items-center p-4 z-50">
             <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
@@ -685,7 +764,7 @@ function App() {
           </div>
         )}
 
-        {/* Modal Form Set Target Budget */}
+        {/* Modal Form Target Budget */}
         {showBudgetModal && (
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex justify-center items-center p-4 z-50">
             <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
@@ -716,7 +795,7 @@ function App() {
                     required
                   />
                   <p className="text-xs text-slate-500 mt-2">
-                    Batas ini akan digunakan sebagai indikator peringatan pengeluaran pada periode terpilih.
+                    Batas ini digunakan sebagai indikator peringatan pengeluaran pada periode terpilih.
                   </p>
                 </div>
 
@@ -736,6 +815,149 @@ function App() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL KELOLA KATEGORI MANDIRI (CUSTOM CATEGORIES) */}
+        {showCategoryModal && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex justify-center items-center p-4 z-50">
+            <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-6 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+              
+              <div className="flex justify-between items-center border-b border-slate-700 pb-4">
+                <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                  <Tags className="w-5 h-5 text-amber-400" />
+                  Kelola Kategori Mandiri
+                </h3>
+                <button 
+                  onClick={() => setShowCategoryModal(false)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-700"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Form Tambah / Edit Kategori */}
+              <form onSubmit={handleSaveCategory} className="bg-slate-900/60 p-4 rounded-xl border border-slate-700/60 space-y-3">
+                <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                  {editingCategory ? 'Edit Kategori' : 'Tambah Kategori Baru'}
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <select
+                    value={catType}
+                    onChange={(e) => setCatType(e.target.value)}
+                    className="bg-slate-800 border border-slate-700 text-sm rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="expense">Pengeluaran</option>
+                    <option value="income">Pemasukan</option>
+                  </select>
+
+                  <input
+                    type="text"
+                    placeholder="Nama kategori (ex: Investasi, Hobi)..."
+                    value={catName}
+                    onChange={(e) => setCatName(e.target.value)}
+                    className="bg-slate-800 border border-slate-700 text-sm rounded-xl px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 flex-1"
+                    required
+                  />
+
+                  <div className="flex gap-1.5">
+                    <button
+                      type="submit"
+                      className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-sm transition-all flex items-center gap-1"
+                    >
+                      {editingCategory ? <Pencil className="w-3.5 h-3.5" /> : <Plus className="w-4 h-4" />}
+                      {editingCategory ? 'Update' : 'Tambah'}
+                    </button>
+
+                    {editingCategory && (
+                      <button
+                        type="button"
+                        onClick={handleCancelCategoryEdit}
+                        className="bg-slate-700 hover:bg-slate-600 text-slate-300 font-medium px-3 py-2 rounded-xl text-sm transition-all"
+                      >
+                        Batal
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </form>
+
+              {/* Daftar Kategori Eksisting */}
+              <div className="space-y-4">
+                {/* Kategori Pengeluaran */}
+                <div>
+                  <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <TrendingDown className="w-4 h-4" />
+                    Kategori Pengeluaran ({categories.filter(c => c.type === 'expense').length})
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {categories.filter(c => c.type === 'expense').map(cat => (
+                      <div key={cat.id} className="bg-slate-900 border border-slate-700/80 px-3 py-1.5 rounded-xl flex items-center gap-2 text-xs text-slate-200">
+                        <span>{cat.name}</span>
+                        <div className="flex items-center gap-1 border-l border-slate-700 pl-1.5">
+                          <button
+                            onClick={() => handleEditCategoryClick(cat)}
+                            className="text-slate-400 hover:text-amber-400 p-0.5 rounded"
+                            title="Edit"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCategory(cat.id)}
+                            className="text-slate-400 hover:text-rose-400 p-0.5 rounded"
+                            title="Hapus"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Kategori Pemasukan */}
+                <div>
+                  <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <TrendingUp className="w-4 h-4" />
+                    Kategori Pemasukan ({categories.filter(c => c.type === 'income').length})
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {categories.filter(c => c.type === 'income').map(cat => (
+                      <div key={cat.id} className="bg-slate-900 border border-slate-700/80 px-3 py-1.5 rounded-xl flex items-center gap-2 text-xs text-slate-200">
+                        <span>{cat.name}</span>
+                        <div className="flex items-center gap-1 border-l border-slate-700 pl-1.5">
+                          <button
+                            onClick={() => handleEditCategoryClick(cat)}
+                            className="text-slate-400 hover:text-amber-400 p-0.5 rounded"
+                            title="Edit"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCategory(cat.id)}
+                            className="text-slate-400 hover:text-rose-400 p-0.5 rounded"
+                            title="Hapus"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-2 border-t border-slate-700">
+                <button
+                  onClick={() => setShowCategoryModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-semibold transition-all"
+                >
+                  Selesai
+                </button>
+              </div>
+
             </div>
           </div>
         )}
