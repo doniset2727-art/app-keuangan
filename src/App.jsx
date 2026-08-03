@@ -20,7 +20,8 @@ import {
   CheckCircle2,
   Sliders,
   Tags,
-  Plus
+  Plus,
+  Download
 } from 'lucide-react'
 import { 
   ResponsiveContainer, 
@@ -214,7 +215,6 @@ function App() {
     if (!catName.trim()) return alert('Nama kategori tidak boleh kosong!')
 
     if (editingCategory) {
-      // Update Kategori
       const { error } = await supabase
         .from('categories')
         .update({ name: catName.trim(), type: catType })
@@ -225,10 +225,9 @@ function App() {
       } else {
         handleCancelCategoryEdit()
         fetchCategories()
-        fetchTransactions() // refresh jika nama kategori di transaksi terpengaruh
+        fetchTransactions()
       }
     } else {
-      // Tambah Kategori Baru
       const { error } = await supabase
         .from('categories')
         .insert([{ name: catName.trim(), type: catType }])
@@ -252,6 +251,47 @@ function App() {
         fetchTransactions()
       }
     }
+  }
+
+  // --- LOGIC EKSPOR DATA KE CSV / EXCEL ---
+  const handleExportCSV = () => {
+    if (filteredTransactions.length === 0) {
+      return alert('Tidak ada data transaksi untuk diekspor!')
+    }
+
+    // Header Kolom CSV
+    const headers = ['Tanggal', 'Tipe Transaksi', 'Kategori', 'Catatan / Deskripsi', 'Nominal (Rp)']
+
+    // Format Baris Data
+    const rows = filteredTransactions.map((item) => [
+      item.transaction_date || '',
+      item.type === 'income' ? 'Pemasukan' : 'Pengeluaran',
+      `"${(item.categories?.name || 'Tanpa Kategori').replace(/"/g, '""')}"`,
+      `"${(item.description || '-').replace(/"/g, '""')}"`,
+      item.amount
+    ])
+
+    // Gabungkan Header dan Baris
+    const csvArray = [headers.join(','), ...rows.map((r) => r.join(','))]
+    const csvString = csvArray.join('\n')
+
+    // Tambahkan \uFEFF (UTF-8 BOM) agar Excel membaca karakter dengan benar
+    const blob = new Blob(['\uFEFF' + csvString], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+
+    // Buat elemen link virtual untuk trigger pemicu unduhan
+    const link = document.createElement('a')
+    link.href = url
+
+    let fileName = 'Laporan_Keuangan'
+    if (selectedMonth !== 'all') fileName += `_Bulan_${selectedMonth}`
+    if (selectedYear !== 'all') fileName += `_${selectedYear}`
+    fileName += '.csv'
+
+    link.setAttribute('download', fileName)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
   // Dapatkan daftar tahun unik
@@ -413,6 +453,16 @@ function App() {
                 ))}
               </select>
             </div>
+
+            {/* Tombol Ekspor CSV */}
+            <button
+              onClick={handleExportCSV}
+              className="flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 py-2.5 rounded-xl border border-emerald-500/20 transition-all font-medium"
+              title="Ekspor data ke file Excel / CSV"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Ekspor CSV
+            </button>
 
             {(searchTerm || selectedMonth !== 'all' || selectedYear !== 'all') && (
               <button
@@ -819,7 +869,7 @@ function App() {
           </div>
         )}
 
-        {/* MODAL KELOLA KATEGORI MANDIRI (CUSTOM CATEGORIES) */}
+        {/* Modal Kelola Kategori Mandiri */}
         {showCategoryModal && (
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex justify-center items-center p-4 z-50">
             <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-6 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
@@ -837,7 +887,6 @@ function App() {
                 </button>
               </div>
 
-              {/* Form Tambah / Edit Kategori */}
               <form onSubmit={handleSaveCategory} className="bg-slate-900/60 p-4 rounded-xl border border-slate-700/60 space-y-3">
                 <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
                   {editingCategory ? 'Edit Kategori' : 'Tambah Kategori Baru'}
@@ -884,9 +933,7 @@ function App() {
                 </div>
               </form>
 
-              {/* Daftar Kategori Eksisting */}
               <div className="space-y-4">
-                {/* Kategori Pengeluaran */}
                 <div>
                   <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                     <TrendingDown className="w-4 h-4" />
@@ -917,7 +964,6 @@ function App() {
                   </div>
                 </div>
 
-                {/* Kategori Pemasukan */}
                 <div>
                   <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                     <TrendingUp className="w-4 h-4" />
