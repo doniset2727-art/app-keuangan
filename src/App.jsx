@@ -36,54 +36,49 @@ import {
 const CHART_COLORS = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899']
 
 function App() {
-  // Navigation State ('dashboard' | 'income' | 'expense' | 'installments' | 'categories')
+  // ==========================================
+  // 1. STATE DECLARATIONS
+  // ==========================================
   const [activeTab, setActiveTab] = useState('dashboard')
-  // State untuk mengontrol Bottom Sheet Kategori
   const [showCategorySheet, setShowCategorySheet] = useState(false)
-
-  const getCategoryEmoji = (name = '') => {
-  const lower = name.toLowerCase()
-  if (lower.includes('makan') || lower.includes('kuliner')) return '🍔'
-  if (lower.includes('minum') || lower.includes('kopi')) return '☕'
-  if (lower.includes('gaji') || lower.includes('income')) return '💰'
-  if (lower.includes('trans') || lower.includes('bensin') || lower.includes('ojek')) return '🚗'
-  if (lower.includes('tagihan') || lower.includes('listrik') || lower.includes('air')) return '⚡'
-  if (lower.includes('belanja') || lower.includes('mall')) return '🛍️'
-  if (lower.includes('hiburan') || lower.includes('nonton')) return '🎬'
-  if (lower.includes('sampingan') || lower.includes('freelance')) return '💼'
-  if (lower.includes('bonus') || lower.includes('thr')) return '🎁'
-  return '📌' // Emoji bawaan jika tidak ada kata kunci yang cocok
-  }
+  const [deferredPrompt, setDeferredPrompt] = useState(null)
+  const [showInstallBtn, setShowInstallBtn] = useState(false)
   
-  // Privacy & UI State
+  // State Filter Waktu
+  const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
+  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+
+  // State Modal & UI
+  const [deleteConfirm, setDeleteConfirm] = useState({ show: false, id: null });
   const [hideBalance, setHideBalance] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [showBudgetModal, setShowBudgetModal] = useState(false)
 
-  // Data States
+  // State Data Database
   const [transactions, setTransactions] = useState([])
   const [categories, setCategories] = useState([])
   const [installments, setInstallments] = useState([])
   const [loading, setLoading] = useState(true)
 
-  // Form States
+  // State Form Transaksi
   const [editingTransaction, setEditingTransaction] = useState(null)
   const [amount, setAmount] = useState('')
   const [type, setType] = useState('expense')
   const [categoryId, setCategoryId] = useState('')
   const [description, setDescription] = useState('')
 
-  // Budget State
+  // State Budget & Kategori & Cicilan
   const [monthlyBudget, setMonthlyBudget] = useState(3000000)
   const [inputBudget, setInputBudget] = useState('')
-
-  // Category & Installment Form States
   const [catName, setCatName] = useState('')
   const [catType, setCatType] = useState('expense')
   const [instName, setInstName] = useState('')
   const [instNominal, setInstNominal] = useState('')
   const [instTenor, setInstTenor] = useState('')
 
+  // ==========================================
+  // 2. EFFECTS
+  // ==========================================
   useEffect(() => {
     fetchCategories()
     fetchTransactions()
@@ -93,6 +88,71 @@ function App() {
     setMonthlyBudget(Number(savedBudget))
   }, [])
 
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault()
+      setDeferredPrompt(e)
+      setShowInstallBtn(true)
+    }
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+    }
+  }, [])
+
+  // ==========================================
+  // 3. DERIVED STATES & CALCULATIONS (Penting!)
+  // ==========================================
+  
+  // Filter transaksi berdasarkan bulan & tahun yang dipilih
+  const filteredTransactions = transactions.filter(t => {
+    // Menggunakan t.transaction_date sesuai dengan nama kolom di Supabase
+    const date = new Date(t.transaction_date); 
+    return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+  });
+
+  // Perhitungan Keuangan (menggunakan data yang sudah difilter bulan ini)
+  const totalIncome = filteredTransactions.filter(t => t.type === 'income').reduce((acc, curr) => acc + Number(curr.amount), 0)
+  const totalExpense = filteredTransactions.filter(t => t.type === 'expense').reduce((acc, curr) => acc + Number(curr.amount), 0)
+  const balance = totalIncome - totalExpense
+  const budgetPercentage = monthlyBudget > 0 ? Math.round((totalExpense / monthlyBudget) * 100) : 0
+
+  // Chart Data
+  const expenseByCategory = filteredTransactions.filter(t => t.type === 'expense').reduce((acc, t) => {
+    const cName = t.categories?.name || 'Lainnya'
+    acc[cName] = (acc[cName] || 0) + Number(t.amount)
+    return acc
+  }, {})
+  const pieChartData = Object.keys(expenseByCategory).map(name => ({ name, value: expenseByCategory[name] }))
+  const barChartData = [{ name: 'Pemasukan', total: totalIncome }, { name: 'Pengeluaran', total: totalExpense }]
+
+  // ==========================================
+  // 4. HELPER FUNCTIONS
+  // ==========================================
+  const formatRupiah = (num) => {
+    if (hideBalance) return 'Rp •••••••'
+    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(num)
+  }
+
+  const getCategoryEmoji = (name = '') => {
+    const lower = name.toLowerCase()
+    if (lower.includes('makan') || lower.includes('kuliner')) return '🍔'
+    if (lower.includes('minum') || lower.includes('kopi')) return '☕'
+    if (lower.includes('gaji') || lower.includes('income')) return '💰'
+    if (lower.includes('trans') || lower.includes('bensin') || lower.includes('ojek')) return '🚗'
+    if (lower.includes('tagihan') || lower.includes('listrik') || lower.includes('air')) return '⚡'
+    if (lower.includes('belanja') || lower.includes('mall')) return '🛍️'
+    if (lower.includes('hiburan') || lower.includes('nonton')) return '🎬'
+    if (lower.includes('sampingan') || lower.includes('freelance')) return '💼'
+    if (lower.includes('bonus') || lower.includes('thr')) return '🎁'
+    return '📌' 
+  }
+
+  const triggerDelete = (id) => setDeleteConfirm({ show: true, id: id });
+
+  // ==========================================
+  // 5. API & EVENT HANDLERS
+  // ==========================================
   const fetchCategories = async () => {
     const { data } = await supabase.from('categories').select('*').order('name', { ascending: true })
     setCategories(data || [])
@@ -105,22 +165,22 @@ function App() {
     setLoading(false)
   }
 
-  // Handle Quick Add / Edit
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return
+    deferredPrompt.prompt()
+    const { outcome } = await deferredPrompt.userChoice
+    if (outcome === 'accepted') {
+      setShowInstallBtn(false)
+    }
+    setDeferredPrompt(null)
+  }
+
   const handleOpenCreateModal = (defaultType = 'expense') => {
     setEditingTransaction(null)
     setAmount('')
     setType(defaultType)
     setCategoryId('')
     setDescription('')
-    setShowModal(true)
-  }
-
-  const handleOpenEditModal = (item) => {
-    setEditingTransaction(item)
-    setAmount(item.amount)
-    setType(item.type)
-    setCategoryId(item.category_id || '')
-    setDescription(item.description || '')
     setShowModal(true)
   }
 
@@ -147,13 +207,10 @@ function App() {
   }
 
   const handleDeleteTransaction = async (id) => {
-    if (window.confirm('Hapus transaksi ini?')) {
-      const { error } = await supabase.from('transactions').delete().eq('id', id)
-      if (!error) fetchTransactions()
-    }
+    const { error } = await supabase.from('transactions').delete().eq('id', id)
+    if (!error) fetchTransactions()
   }
 
-  // Handle Target Anggaran
   const handleSaveBudget = (e) => {
     e.preventDefault()
     const num = parseFloat(inputBudget)
@@ -163,7 +220,6 @@ function App() {
     setShowBudgetModal(false)
   }
 
-  // Handle Kategori & Cicilan
   const handleSaveCategory = async (e) => {
     e.preventDefault()
     if (!catName.trim()) return
@@ -193,7 +249,6 @@ function App() {
     localStorage.setItem('user_installments', JSON.stringify(newInst))
   }
 
-  // Export CSV
   const handleExportCSV = () => {
     if (transactions.length === 0) return alert('Tidak ada data!')
     const headers = ['Tanggal', 'Tipe', 'Kategori', 'Catatan', 'Nominal']
@@ -215,31 +270,13 @@ function App() {
     document.body.removeChild(link)
   }
 
-  // Calculations
-  const totalIncome = transactions.filter(t => t.type === 'income').reduce((acc, curr) => acc + Number(curr.amount), 0)
-  const totalExpense = transactions.filter(t => t.type === 'expense').reduce((acc, curr) => acc + Number(curr.amount), 0)
-  const balance = totalIncome - totalExpense
-
-  const budgetPercentage = monthlyBudget > 0 ? Math.round((totalExpense / monthlyBudget) * 100) : 0
-
-  const formatRupiah = (num) => {
-    if (hideBalance) return 'Rp •••••••'
-    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(num)
-  }
-
-  // Chart Data
-  const expenseByCategory = transactions.filter(t => t.type === 'expense').reduce((acc, t) => {
-    const cName = t.categories?.name || 'Lainnya'
-    acc[cName] = (acc[cName] || 0) + Number(t.amount)
-    return acc
-  }, {})
-  const pieChartData = Object.keys(expenseByCategory).map(name => ({ name, value: expenseByCategory[name] }))
-  const barChartData = [{ name: 'Pemasukan', total: totalIncome }, { name: 'Pengeluaran', total: totalExpense }]
-
+  // ==========================================
+  // 6. RENDER COMPONENT
+  // ==========================================
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-24 md:pb-8 md:pl-64">
       
-      {/* --- DESKTOP SIDEBAR (Sembunyi di HP) --- */}
+      {/* --- DESKTOP SIDEBAR --- */}
       <aside className="hidden md:flex fixed inset-y-0 left-0 w-64 bg-slate-900 border-r border-slate-800 flex-col justify-between z-30">
         <div>
           <div className="h-16 flex items-center px-6 border-b border-slate-800 gap-3">
@@ -278,21 +315,11 @@ function App() {
             {activeTab === 'dashboard' ? 'Financial.io' : activeTab}
           </h1>
         </div>
-
-        {/* Sensor Saldo Toggle & Export */}
         <div className="flex items-center gap-2">
-          <button 
-            onClick={() => setHideBalance(!hideBalance)} 
-            className="p-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-slate-300 transition-colors"
-            title="Sembunyikan Nominal"
-          >
+          <button onClick={() => setHideBalance(!hideBalance)} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-slate-300 transition-colors" title="Sembunyikan Nominal">
             {hideBalance ? <EyeOff className="w-4 h-4 text-amber-400" /> : <Eye className="w-4 h-4" />}
           </button>
-          <button 
-            onClick={handleExportCSV} 
-            className="p-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-emerald-400 transition-colors"
-            title="Ekspor CSV"
-          >
+          <button onClick={handleExportCSV} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-emerald-400 transition-colors" title="Ekspor CSV">
             <Download className="w-4 h-4" />
           </button>
         </div>
@@ -301,7 +328,7 @@ function App() {
       {/* --- MAIN CONTENT AREA --- */}
       <main className="p-4 space-y-4 max-w-4xl mx-auto">
 
-        {/* CARD SALDO UTAMA (Tampilan Mobile Friendly) */}
+        {/* CARD SALDO UTAMA (Terlihat di semua tab yang berkaitan dengan uang) */}
         <div className="bg-gradient-to-br from-blue-900/40 via-slate-900 to-slate-900 p-5 rounded-3xl border border-blue-500/20 shadow-xl space-y-4 relative overflow-hidden">
           <div className="flex justify-between items-start">
             <div>
@@ -311,8 +338,15 @@ function App() {
               </h2>
             </div>
           </div>
+          {budgetPercentage >= 80 && (
+            <div className="bg-red-500/10 border border-red-500/50 p-3 rounded-xl flex items-center gap-3 animate-pulse">
+              <span className="text-red-500 text-xl">⚠️</span>
+              <p className="text-red-400 text-xs">
+                <b>Hati-hati!</b> Pengeluaran mencapai {budgetPercentage.toFixed(0)}% dari budget.
+              </p>
+            </div>
+          )}
 
-          {/* Quick Stat In/Out */}
           <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-800/80">
             <div className="flex items-center gap-2">
               <div className="p-1.5 bg-emerald-500/10 text-emerald-400 rounded-lg">
@@ -323,7 +357,6 @@ function App() {
                 <p className="text-xs font-bold text-emerald-400">{formatRupiah(totalIncome)}</p>
               </div>
             </div>
-
             <div className="flex items-center gap-2">
               <div className="p-1.5 bg-rose-500/10 text-rose-400 rounded-lg">
                 <TrendingDown className="w-3.5 h-3.5" />
@@ -335,7 +368,6 @@ function App() {
             </div>
           </div>
 
-          {/* Progress Anggaran */}
           <div className="pt-2">
             <div className="flex justify-between items-center text-[10px] text-slate-400 mb-1">
               <span>Batas Anggaran: {formatRupiah(monthlyBudget)}</span>
@@ -352,17 +384,27 @@ function App() {
           </div>
         </div>
 
+        {/* UI FILTER BULAN (Ditaruh di luar tab dashboard agar bisa berlaku global) */}
+        <div className="flex justify-between items-center bg-slate-900 p-3 rounded-xl border border-slate-800 mb-4">
+          <button onClick={() => setCurrentMonth(prev => prev === 0 ? 11 : prev - 1)} className="text-white p-1 hover:bg-slate-800 rounded">◀</button>
+          <span className="font-bold text-white text-sm">
+            {new Date(currentYear, currentMonth).toLocaleString('id-ID', { month: 'long', year: 'numeric' })}
+          </span>
+          <button onClick={() => setCurrentMonth(prev => prev === 11 ? 0 : prev + 1)} className="text-white p-1 hover:bg-slate-800 rounded">▶</button>
+        </div>
+
+        {/* ======================================= */}
         {/* TAB 1: DASHBOARD OVERVIEW */}
+        {/* ======================================= */}
         {activeTab === 'dashboard' && (
           <div className="space-y-4">
-            {/* Visual Mini Charts */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800">
                 <h3 className="text-xs font-semibold text-slate-300 mb-2 flex items-center gap-1.5">
                   <PieChartIcon className="w-3.5 h-3.5 text-rose-400" /> Kategori Pengeluaran
                 </h3>
                 {pieChartData.length === 0 ? (
-                  <div className="h-36 flex items-center justify-center text-[10px] text-slate-500">Belum ada data pengeluaran</div>
+                  <div className="h-36 flex items-center justify-center text-[10px] text-slate-500">Belum ada data</div>
                 ) : (
                   <div className="h-36">
                     <ResponsiveContainer width="100%" height="100%">
@@ -397,36 +439,46 @@ function App() {
                 </div>
               </div>
             </div>
-
-            {/* Transaksi Terakhir List */}
+            
             <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
               <div className="p-3 border-b border-slate-800 flex justify-between items-center">
                 <h3 className="text-xs font-bold text-white">Transaksi Terbaru</h3>
                 <button onClick={() => setActiveTab('expense')} className="text-[11px] text-blue-400 hover:underline">Semua</button>
               </div>
               <div className="divide-y divide-slate-800/60">
-                {transactions.slice(0, 5).map((item) => (
-                  <div key={item.id} className="p-3 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2.5">
-                      <div className={`p-2 rounded-xl ${item.type === 'income' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                        {item.type === 'income' ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                {filteredTransactions.length === 0 ? (
+                   <div className="p-4 text-center text-xs text-slate-500">Belum ada transaksi di bulan ini.</div>
+                ) : (
+                  filteredTransactions.slice(0, 5).map((item) => (
+                    <div key={item.id} className="p-3 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2.5">
+                        <div className={`p-2 rounded-xl ${item.type === 'income' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                          {item.type === 'income' ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-white">{item.description || 'Tanpa Catatan'}</p>
+                          <p className="text-[10px] text-slate-500">{item.transaction_date} • {item.categories?.name || '-'}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-semibold text-white">{item.description || 'Tanpa Catatan'}</p>
-                        <p className="text-[10px] text-slate-500">{item.transaction_date} • {item.categories?.name || '-'}</p>
+                      <div className="flex items-center gap-3">
+                        <span className={`font-bold ${item.type === 'income' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {item.type === 'income' ? '+' : '-'} {formatRupiah(item.amount)}
+                        </span>
+                        <button onClick={() => triggerDelete(item.id)} className="text-slate-500 hover:text-rose-400">
+                           <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
-                    <span className={`font-bold ${item.type === 'income' ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {item.type === 'income' ? '+' : '-'} {formatRupiah(item.amount)}
-                    </span>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           </div>
         )}
 
+        {/* ======================================= */}
         {/* TAB 2: PEMASUKAN */}
+        {/* ======================================= */}
         {activeTab === 'income' && (
           <div className="space-y-3">
             <div className="flex justify-between items-center bg-slate-900 p-3 rounded-xl border border-slate-800">
@@ -436,7 +488,7 @@ function App() {
               </button>
             </div>
             <div className="space-y-2">
-              {transactions.filter(t => t.type === 'income').map(t => (
+              {filteredTransactions.filter(t => t.type === 'income').map(t => (
                 <div key={t.id} className="bg-slate-900 p-3 rounded-xl border border-slate-800/80 flex justify-between items-center text-xs">
                   <div>
                     <p className="font-bold text-white">{t.description || 'Pemasukan'}</p>
@@ -444,7 +496,7 @@ function App() {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="font-bold text-emerald-400">+{formatRupiah(t.amount)}</span>
-                    <button onClick={() => handleDeleteTransaction(t.id)} className="text-slate-500 hover:text-rose-400"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => triggerDelete(t.id)} className="text-slate-500 hover:text-rose-400"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 </div>
               ))}
@@ -452,7 +504,9 @@ function App() {
           </div>
         )}
 
+        {/* ======================================= */}
         {/* TAB 3: PENGELUARAN */}
+        {/* ======================================= */}
         {activeTab === 'expense' && (
           <div className="space-y-3">
             <div className="flex justify-between items-center bg-slate-900 p-3 rounded-xl border border-slate-800">
@@ -462,7 +516,7 @@ function App() {
               </button>
             </div>
             <div className="space-y-2">
-              {transactions.filter(t => t.type === 'expense').map(t => (
+              {filteredTransactions.filter(t => t.type === 'expense').map(t => (
                 <div key={t.id} className="bg-slate-900 p-3 rounded-xl border border-slate-800/80 flex justify-between items-center text-xs">
                   <div>
                     <p className="font-bold text-white">{t.description || 'Pengeluaran'}</p>
@@ -470,7 +524,7 @@ function App() {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="font-bold text-rose-400">-{formatRupiah(t.amount)}</span>
-                    <button onClick={() => handleDeleteTransaction(t.id)} className="text-slate-500 hover:text-rose-400"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => triggerDelete(t.id)} className="text-slate-500 hover:text-rose-400"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 </div>
               ))}
@@ -478,7 +532,9 @@ function App() {
           </div>
         )}
 
+        {/* ======================================= */}
         {/* TAB 4: CICILAN */}
+        {/* ======================================= */}
         {activeTab === 'installments' && (
           <div className="space-y-4">
             <form onSubmit={handleAddInstallment} className="bg-slate-900 p-4 rounded-2xl border border-slate-800 space-y-2 text-xs">
@@ -504,7 +560,9 @@ function App() {
           </div>
         )}
 
+        {/* ======================================= */}
         {/* TAB 5: KATEGORI */}
+        {/* ======================================= */}
         {activeTab === 'categories' && (
           <div className="space-y-4">
             <form onSubmit={handleSaveCategory} className="bg-slate-900 p-4 rounded-2xl border border-slate-800 flex gap-2 text-xs">
@@ -529,53 +587,49 @@ function App() {
             </div>
           </div>
         )}
-
       </main>
 
-      {/* --- MOBILE BOTTOM NAVIGATION BAR (Khusus HP) --- */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur border-t border-slate-800 px-4 py-2 flex justify-around items-center z-40">
-        <button 
-          onClick={() => setActiveTab('dashboard')} 
-          className={`flex flex-col items-center text-[10px] font-medium transition-colors ${activeTab === 'dashboard' ? 'text-blue-500' : 'text-slate-500'}`}
-        >
-          <LayoutDashboard className="w-5 h-5 mb-0.5" />
-          <span>Home</span>
-        </button>
+      {/* ======================================= */}
+      {/* MODALS & OVERLAYS */}
+      {/* ======================================= */}
 
-        <button 
-          onClick={() => setActiveTab('income')} 
-          className={`flex flex-col items-center text-[10px] font-medium transition-colors ${activeTab === 'income' ? 'text-emerald-400' : 'text-slate-500'}`}
-        >
-          <TrendingUp className="w-5 h-5 mb-0.5" />
-          <span>Masuk</span>
-        </button>
+      {/* 1. Modal Konfirmasi Hapus */}
+      {deleteConfirm.show && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[100] flex justify-center items-center p-4">
+          <div className="bg-slate-900 border border-slate-700 p-6 rounded-3xl w-full max-w-sm text-center">
+            <div className="text-4xl mb-4">🗑️</div>
+            <h3 className="text-white font-bold text-lg">Hapus Transaksi?</h3>
+            <p className="text-slate-400 text-sm mb-6">Tindakan ini tidak bisa dibatalkan.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteConfirm({ show: false, id: null })} className="flex-1 py-3 bg-slate-800 text-white rounded-xl">Batal</button>
+              <button 
+                onClick={() => {
+                  handleDeleteTransaction(deleteConfirm.id); 
+                  setDeleteConfirm({ show: false, id: null });
+                }}
+                className="flex-1 py-3 bg-red-600 text-white rounded-xl"
+              >Ya, Hapus</button>
+            </div>
+          </div>
+        </div>
+      )}
 
-        {/* FLOATING ACTION BUTTON (+) DI TENGAH */}
-        <button 
-          onClick={() => handleOpenCreateModal('expense')}
-          className="bg-blue-600 hover:bg-blue-500 text-white p-3.5 rounded-full shadow-lg shadow-blue-600/40 -mt-6 border-4 border-slate-950 active:scale-95 transition-all"
-        >
-          <Plus className="w-6 h-6 stroke-[3]" />
-        </button>
+      {/* 2. Banner PWA */}
+      {showInstallBtn && (
+        <div className="fixed bottom-20 left-4 right-4 md:bottom-4 md:left-72 md:right-4 z-40">
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-3.5 rounded-2xl flex justify-between items-center text-xs shadow-lg text-white">
+            <div>
+              <p className="font-bold">Install Financial.io di HP</p>
+              <p className="text-[10px] text-blue-100">Akses lebih cepat & terasa seperti app native!</p>
+            </div>
+            <button onClick={handleInstallClick} className="bg-white text-blue-600 font-bold px-3 py-1.5 rounded-xl shadow active:scale-95 transition-all whitespace-nowrap">
+              Install Sekarang
+            </button>
+          </div>
+        </div>
+      )}
 
-        <button 
-          onClick={() => setActiveTab('expense')} 
-          className={`flex flex-col items-center text-[10px] font-medium transition-colors ${activeTab === 'expense' ? 'text-rose-400' : 'text-slate-500'}`}
-        >
-          <TrendingDown className="w-5 h-5 mb-0.5" />
-          <span>Keluar</span>
-        </button>
-
-        <button 
-          onClick={() => setActiveTab('installments')} 
-          className={`flex flex-col items-center text-[10px] font-medium transition-colors ${activeTab === 'installments' ? 'text-amber-400' : 'text-slate-500'}`}
-        >
-          <CreditCard className="w-5 h-5 mb-0.5" />
-          <span>Cicilan</span>
-        </button>
-      </nav>
-
-      {/* --- MODAL TAMBAH TRANSAKSI --- */}
+      {/* 3. Modal Form Transaksi (Beserta Bottom Sheet Kategori) */}
       {showModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex justify-center items-end sm:items-center p-0 sm:p-4 z-50">
           <div className="bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-2xl w-full max-w-md p-6 space-y-4 animate-in slide-in-from-bottom duration-200">
@@ -598,78 +652,24 @@ function App() {
                 <input type="number" placeholder="0" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white text-sm font-bold" required />
               </div>
 
-              {/* --- FIELD INPUT KATEGORI (TRIGGER BOTTOM SHEET) --- */}
-<div>
-  <label className="block text-slate-400 mb-1">Kategori</label>
-  <button
-    type="button"
-    onClick={() => setShowCategorySheet(true)}
-    className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-left text-white flex items-center justify-between hover:bg-slate-750 transition-colors"
-  >
-    {categoryId ? (
-      <span className="flex items-center gap-2 font-medium">
-        <span>{getCategoryEmoji(categories.find(c => c.id === parseInt(categoryId))?.name)}</span>
-        <span>{categories.find(c => c.id === parseInt(categoryId))?.name}</span>
-      </span>
-    ) : (
-      <span className="text-slate-500">-- Pilih Kategori --</span>
-    )}
-    <span className="text-slate-400 text-xs">Ubah ❯</span>
-  </button>
-</div>
-
-{/* --- BOTTOM SHEET SLIDE-UP KATEGORI (OPSI 2 + 3) --- */}
-{showCategorySheet && (
-  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex justify-center items-end z-[60]">
-    <div className="bg-slate-900 border-t border-slate-800 rounded-t-3xl w-full max-w-md p-5 space-y-4 animate-in slide-in-from-bottom duration-200">
-      
-      {/* Handle Drag Bar & Header */}
-      <div className="flex flex-col items-center">
-        <div className="w-12 h-1.5 bg-slate-700 rounded-full mb-3"></div>
-        <div className="w-full flex justify-between items-center pb-2 border-b border-slate-800">
-          <h4 className="font-bold text-white text-sm">Pilih Kategori ({type === 'expense' ? 'Pengeluaran' : 'Pemasukan'})</h4>
-          <button 
-            type="button" 
-            onClick={() => setShowCategorySheet(false)}
-            className="text-slate-400 hover:text-white text-xs font-semibold px-2 py-1 bg-slate-800 rounded-lg"
-          >
-            Tutup
-          </button>
-        </div>
-      </div>
-
-      {/* GRID KATEGORI VISUAL DENGAN EMOJI */}
-      <div className="grid grid-cols-2 gap-2.5 max-h-60 overflow-y-auto pr-1">
-        {categories
-          .filter(c => c.type === type)
-          .map(cat => {
-            const isSelected = parseInt(categoryId) === cat.id
-            return (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => {
-                  setCategoryId(cat.id.toString())
-                  setShowCategorySheet(false)
-                }}
-                className={`p-3 rounded-2xl border text-left flex items-center gap-2.5 transition-all ${
-                  isSelected 
-                    ? 'bg-blue-600/20 border-blue-500 text-white font-bold ring-2 ring-blue-500/50' 
-                    : 'bg-slate-800/60 border-slate-700/60 text-slate-300 hover:bg-slate-800'
-                }`}
-              >
-                <span className="text-lg p-1.5 bg-slate-900/80 rounded-xl">
-                  {getCategoryEmoji(cat.name)}
-                </span>
-                <span className="text-xs font-medium truncate">{cat.name}</span>
-              </button>
-            )
-          })}
-      </div>
-
-    </div>
-  </div>
-)}
+              <div>
+                <label className="block text-slate-400 mb-1">Kategori</label>
+                <button
+                  type="button"
+                  onClick={() => setShowCategorySheet(true)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-left text-white flex items-center justify-between hover:bg-slate-750 transition-colors"
+                >
+                  {categoryId ? (
+                    <span className="flex items-center gap-2 font-medium">
+                      <span>{getCategoryEmoji(categories.find(c => c.id === parseInt(categoryId))?.name)}</span>
+                      <span>{categories.find(c => c.id === parseInt(categoryId))?.name}</span>
+                    </span>
+                  ) : (
+                    <span className="text-slate-500">-- Pilih Kategori --</span>
+                  )}
+                  <span className="text-slate-400 text-xs">Ubah ❯</span>
+                </button>
+              </div>
 
               <div>
                 <label className="block text-slate-400 mb-1">Catatan</label>
@@ -684,7 +684,42 @@ function App() {
         </div>
       )}
 
-      {/* --- MODAL EDIT ANGGARAN --- */}
+      {/* 4. Bottom Sheet Kategori (Dipanggil dari dalam Form Modal) */}
+      {showCategorySheet && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex justify-center items-end z-[60]">
+          <div className="bg-slate-900 border-t border-slate-800 rounded-t-3xl w-full max-w-md p-5 space-y-4 animate-in slide-in-from-bottom duration-200">
+            <div className="flex flex-col items-center">
+              <div className="w-12 h-1.5 bg-slate-700 rounded-full mb-3"></div>
+              <div className="w-full flex justify-between items-center pb-2 border-b border-slate-800">
+                <h4 className="font-bold text-white text-sm">Pilih Kategori ({type === 'expense' ? 'Pengeluaran' : 'Pemasukan'})</h4>
+                <button type="button" onClick={() => setShowCategorySheet(false)} className="text-slate-400 hover:text-white text-xs font-semibold px-2 py-1 bg-slate-800 rounded-lg">
+                  Tutup
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5 max-h-60 overflow-y-auto pr-1">
+              {categories.filter(c => c.type === type).map(cat => {
+                const isSelected = parseInt(categoryId) === cat.id
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => { setCategoryId(cat.id.toString()); setShowCategorySheet(false) }}
+                    className={`p-3 rounded-2xl border text-left flex items-center gap-2.5 transition-all ${
+                      isSelected ? 'bg-blue-600/20 border-blue-500 text-white font-bold ring-2 ring-blue-500/50' : 'bg-slate-800/60 border-slate-700/60 text-slate-300 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span className="text-lg p-1.5 bg-slate-900/80 rounded-xl">{getCategoryEmoji(cat.name)}</span>
+                    <span className="text-xs font-medium truncate">{cat.name}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Modal Edit Budget */}
       {showBudgetModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex justify-center items-center p-4 z-50">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-5 space-y-3">
@@ -699,6 +734,27 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* --- MOBILE BOTTOM NAVIGATION BAR --- */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur border-t border-slate-800 px-4 py-2 flex justify-around items-center z-40">
+        <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center text-[10px] font-medium transition-colors ${activeTab === 'dashboard' ? 'text-blue-500' : 'text-slate-500'}`}>
+          <LayoutDashboard className="w-5 h-5 mb-0.5" /> <span>Home</span>
+        </button>
+        <button onClick={() => setActiveTab('income')} className={`flex flex-col items-center text-[10px] font-medium transition-colors ${activeTab === 'income' ? 'text-emerald-400' : 'text-slate-500'}`}>
+          <TrendingUp className="w-5 h-5 mb-0.5" /> <span>Masuk</span>
+        </button>
+
+        <button onClick={() => handleOpenCreateModal('expense')} className="bg-blue-600 hover:bg-blue-500 text-white p-3.5 rounded-full shadow-lg shadow-blue-600/40 -mt-6 border-4 border-slate-950 active:scale-95 transition-all">
+          <Plus className="w-6 h-6 stroke-[3]" />
+        </button>
+
+        <button onClick={() => setActiveTab('expense')} className={`flex flex-col items-center text-[10px] font-medium transition-colors ${activeTab === 'expense' ? 'text-rose-400' : 'text-slate-500'}`}>
+          <TrendingDown className="w-5 h-5 mb-0.5" /> <span>Keluar</span>
+        </button>
+        <button onClick={() => setActiveTab('installments')} className={`flex flex-col items-center text-[10px] font-medium transition-colors ${activeTab === 'installments' ? 'text-amber-400' : 'text-slate-500'}`}>
+          <CreditCard className="w-5 h-5 mb-0.5" /> <span>Cicilan</span>
+        </button>
+      </nav>
 
     </div>
   )
