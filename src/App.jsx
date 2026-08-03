@@ -6,6 +6,7 @@ import {
   TrendingDown, 
   PlusCircle, 
   Trash2, 
+  Pencil,
   Receipt, 
   Calendar,
   X,
@@ -55,8 +56,9 @@ function App() {
   const [selectedMonth, setSelectedMonth] = useState('all')
   const [selectedYear, setSelectedYear] = useState('all')
 
-  // State Modal Form
+  // State Modal & Form (Tambah / Edit)
   const [showModal, setShowModal] = useState(false)
+  const [editingTransaction, setEditingTransaction] = useState(null) // null = Mode Tambah, Object = Mode Edit
   const [amount, setAmount] = useState('')
   const [type, setType] = useState('expense')
   const [categoryId, setCategoryId] = useState('')
@@ -85,27 +87,60 @@ function App() {
     setLoading(false)
   }
 
+  // Buka Modal untuk Tambah Transaksi Baru
+  const handleOpenCreateModal = () => {
+    setEditingTransaction(null)
+    setAmount('')
+    setType('expense')
+    setCategoryId('')
+    setDescription('')
+    setShowModal(true)
+  }
+
+  // Buka Modal untuk Edit Transaksi yang Ada
+  const handleOpenEditModal = (item) => {
+    setEditingTransaction(item)
+    setAmount(item.amount)
+    setType(item.type)
+    setCategoryId(item.category_id || '')
+    setDescription(item.description || '')
+    setShowModal(true)
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!amount || !type) return alert('Mohon isi nominal dan tipe transaksi!')
 
-    const { error } = await supabase.from('transactions').insert([
-      {
-        amount: parseFloat(amount),
-        type,
-        category_id: categoryId ? parseInt(categoryId) : null,
-        description,
-      },
-    ])
+    const payload = {
+      amount: parseFloat(amount),
+      type,
+      category_id: categoryId ? parseInt(categoryId) : null,
+      description,
+    }
 
-    if (error) {
-      alert('Gagal menyimpan transaksi: ' + error.message)
+    if (editingTransaction) {
+      // MODE EDIT / UPDATE
+      const { error } = await supabase
+        .from('transactions')
+        .update(payload)
+        .eq('id', editingTransaction.id)
+
+      if (error) {
+        alert('Gagal memperbarui transaksi: ' + error.message)
+      } else {
+        setShowModal(false)
+        fetchTransactions()
+      }
     } else {
-      setAmount('')
-      setDescription('')
-      setCategoryId('')
-      setShowModal(false)
-      fetchTransactions()
+      // MODE TAMBAH / INSERT
+      const { error } = await supabase.from('transactions').insert([payload])
+
+      if (error) {
+        alert('Gagal menyimpan transaksi: ' + error.message)
+      } else {
+        setShowModal(false)
+        fetchTransactions()
+      }
     }
   }
 
@@ -117,7 +152,7 @@ function App() {
     }
   }
 
-  // Dapatkan daftar tahun unik yang ada di transaksi
+  // Dapatkan daftar tahun unik
   const availableYears = Array.from(
     new Set(
       transactions
@@ -126,7 +161,7 @@ function App() {
     )
   ).sort((a, b) => b - a)
 
-  // LOGIKA FILTER TRANSAKSI
+  // Filter Transaksi
   const filteredTransactions = transactions.filter((t) => {
     const [year, month] = t.transaction_date ? t.transaction_date.split('-') : ['', '']
 
@@ -140,7 +175,7 @@ function App() {
     return matchesSearch && matchesMonth && matchesYear
   })
 
-  // Kalkulasi Saldo Berdasarkan Filter
+  // Kalkulasi Saldo
   const totalIncome = filteredTransactions
     .filter((t) => t.type === 'income')
     .reduce((acc, curr) => acc + Number(curr.amount), 0)
@@ -161,7 +196,7 @@ function App() {
 
   const filteredCategories = categories.filter((c) => c.type === type)
 
-  // Olah Data Pie Chart Berdasarkan Filter
+  // Data Pie Chart
   const expenseByCategory = filteredTransactions
     .filter((t) => t.type === 'expense')
     .reduce((acc, t) => {
@@ -175,7 +210,7 @@ function App() {
     value: expenseByCategory[name],
   }))
 
-  // Olah Data Bar Chart Berdasarkan Filter
+  // Data Bar Chart
   const barChartData = [
     { name: 'Pemasukan', total: totalIncome },
     { name: 'Pengeluaran', total: totalExpense },
@@ -201,7 +236,7 @@ function App() {
             <p className="text-sm text-slate-400 mt-1">Pantau pemasukan dan pengeluaran harian Anda</p>
           </div>
           <button
-            onClick={() => setShowModal(true)}
+            onClick={handleOpenCreateModal}
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold px-4 py-2.5 rounded-xl transition-all shadow-lg shadow-blue-600/20 active:scale-95"
           >
             <PlusCircle className="w-5 h-5" />
@@ -211,7 +246,6 @@ function App() {
 
         {/* Filter & Search Toolbar */}
         <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700/50 shadow-lg flex flex-col md:flex-row gap-3 items-center justify-between">
-          {/* Input Search */}
           <div className="relative w-full md:w-1/2">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
@@ -223,12 +257,10 @@ function App() {
             />
           </div>
 
-          {/* Dropdown Filters */}
           <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full md:w-auto">
             <div className="flex items-center gap-2 w-full sm:w-auto">
               <Filter className="w-4 h-4 text-slate-400 hidden sm:block" />
               
-              {/* Filter Bulan */}
               <select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
@@ -240,7 +272,6 @@ function App() {
                 ))}
               </select>
 
-              {/* Filter Tahun */}
               <select
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(e.target.value)}
@@ -253,7 +284,6 @@ function App() {
               </select>
             </div>
 
-            {/* Reset Filter Button */}
             {(searchTerm || selectedMonth !== 'all' || selectedYear !== 'all') && (
               <button
                 onClick={resetFilters}
@@ -299,7 +329,7 @@ function App() {
         {/* Visualisasi Grafik Section */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
-          {/* Pie Chart: Pengeluaran Per Kategori */}
+          {/* Pie Chart */}
           <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700/50 shadow-xl flex flex-col justify-between">
             <h3 className="text-base font-semibold text-white flex items-center gap-2 mb-4">
               <PieChartIcon className="w-5 h-5 text-rose-400" />
@@ -337,7 +367,7 @@ function App() {
             )}
           </div>
 
-          {/* Bar Chart: Pemasukan vs Pengeluaran */}
+          {/* Bar Chart */}
           <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700/50 shadow-xl flex flex-col justify-between">
             <h3 className="text-base font-semibold text-white flex items-center gap-2 mb-4">
               <BarChart2 className="w-5 h-5 text-blue-400" />
@@ -414,13 +444,25 @@ function App() {
                         {item.type === 'income' ? '+' : '-'} {formatRupiah(item.amount)}
                       </td>
                       <td className="p-4 text-center">
-                        <button
-                          onClick={() => handleDelete(item.id)}
-                          className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
-                          title="Hapus Transaksi"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1">
+                          {/* Tombol Edit */}
+                          <button
+                            onClick={() => handleOpenEditModal(item)}
+                            className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
+                            title="Edit Transaksi"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          
+                          {/* Tombol Hapus */}
+                          <button
+                            onClick={() => handleDelete(item.id)}
+                            className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                            title="Hapus Transaksi"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -430,12 +472,14 @@ function App() {
           )}
         </div>
 
-        {/* Modal Form */}
+        {/* Modal Form (Tambah / Edit) */}
         {showModal && (
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex justify-center items-center p-4 z-50">
             <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
               <div className="flex justify-between items-center border-b border-slate-700 pb-4">
-                <h3 className="text-lg font-semibold text-white">Tambah Transaksi Baru</h3>
+                <h3 className="text-lg font-semibold text-white">
+                  {editingTransaction ? 'Edit Transaksi' : 'Tambah Transaksi Baru'}
+                </h3>
                 <button 
                   onClick={() => setShowModal(false)}
                   className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-700"
@@ -524,7 +568,7 @@ function App() {
                     type="submit"
                     className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-semibold shadow-lg shadow-blue-600/20 transition-all"
                   >
-                    Simpan Transaksi
+                    {editingTransaction ? 'Simpan Perubahan' : 'Simpan Transaksi'}
                   </button>
                 </div>
               </form>
