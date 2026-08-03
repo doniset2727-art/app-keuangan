@@ -10,7 +10,10 @@ import {
   Calendar,
   X,
   PieChart as PieChartIcon,
-  BarChart2
+  BarChart2,
+  Search,
+  Filter,
+  RotateCcw
 } from 'lucide-react'
 import { 
   ResponsiveContainer, 
@@ -27,11 +30,32 @@ import {
 
 const CHART_COLORS = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16']
 
+const MONTHS = [
+  { value: '01', label: 'Januari' },
+  { value: '02', label: 'Februari' },
+  { value: '03', label: 'Maret' },
+  { value: '04', label: 'April' },
+  { value: '05', label: 'Mei' },
+  { value: '06', label: 'Juni' },
+  { value: '07', label: 'Juli' },
+  { value: '08', label: 'Agustus' },
+  { value: '09', label: 'September' },
+  { value: '10', label: 'Oktober' },
+  { value: '11', label: 'November' },
+  { value: '12', label: 'Desember' },
+]
+
 function App() {
   const [transactions, setTransactions] = useState([])
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
 
+  // State Filter & Search
+  const [searchTerm, setSearchTerm] = useState('')
+  const [selectedMonth, setSelectedMonth] = useState('all')
+  const [selectedYear, setSelectedYear] = useState('all')
+
+  // State Modal Form
   const [showModal, setShowModal] = useState(false)
   const [amount, setAmount] = useState('')
   const [type, setType] = useState('expense')
@@ -54,7 +78,7 @@ function App() {
     const { data, error } = await supabase
       .from('transactions')
       .select('*, categories(name)')
-      .order('created_at', { ascending: false })
+      .order('transaction_date', { ascending: false })
 
     if (error) console.error('Error fetching transactions:', error)
     else setTransactions(data || [])
@@ -93,12 +117,35 @@ function App() {
     }
   }
 
-  // Kalkulasi Saldo
-  const totalIncome = transactions
+  // Dapatkan daftar tahun unik yang ada di transaksi
+  const availableYears = Array.from(
+    new Set(
+      transactions
+        .map((t) => t.transaction_date?.split('-')[0])
+        .filter(Boolean)
+    )
+  ).sort((a, b) => b - a)
+
+  // LOGIKA FILTER TRANSAKSI
+  const filteredTransactions = transactions.filter((t) => {
+    const [year, month] = t.transaction_date ? t.transaction_date.split('-') : ['', '']
+
+    const matchesSearch =
+      (t.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (t.categories?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+
+    const matchesMonth = selectedMonth === 'all' || month === selectedMonth
+    const matchesYear = selectedYear === 'all' || year === selectedYear
+
+    return matchesSearch && matchesMonth && matchesYear
+  })
+
+  // Kalkulasi Saldo Berdasarkan Filter
+  const totalIncome = filteredTransactions
     .filter((t) => t.type === 'income')
     .reduce((acc, curr) => acc + Number(curr.amount), 0)
 
-  const totalExpense = transactions
+  const totalExpense = filteredTransactions
     .filter((t) => t.type === 'expense')
     .reduce((acc, curr) => acc + Number(curr.amount), 0)
 
@@ -114,8 +161,8 @@ function App() {
 
   const filteredCategories = categories.filter((c) => c.type === type)
 
-  // Olah Data untuk Pie Chart (Pengeluaran per Kategori)
-  const expenseByCategory = transactions
+  // Olah Data Pie Chart Berdasarkan Filter
+  const expenseByCategory = filteredTransactions
     .filter((t) => t.type === 'expense')
     .reduce((acc, t) => {
       const catName = t.categories?.name || 'Tanpa Kategori'
@@ -128,11 +175,17 @@ function App() {
     value: expenseByCategory[name],
   }))
 
-  // Olah Data untuk Bar Chart (Perbandingan Pemasukan vs Pengeluaran)
+  // Olah Data Bar Chart Berdasarkan Filter
   const barChartData = [
-    { name: 'Pemasukan', total: totalIncome, fill: '#10b981' },
-    { name: 'Pengeluaran', total: totalExpense, fill: '#ef4444' },
+    { name: 'Pemasukan', total: totalIncome },
+    { name: 'Pengeluaran', total: totalExpense },
   ]
+
+  const resetFilters = () => {
+    setSearchTerm('')
+    setSelectedMonth('all')
+    setSelectedYear('all')
+  }
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-8">
@@ -155,6 +208,64 @@ function App() {
             Tambah Transaksi
           </button>
         </header>
+
+        {/* Filter & Search Toolbar */}
+        <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700/50 shadow-lg flex flex-col md:flex-row gap-3 items-center justify-between">
+          {/* Input Search */}
+          <div className="relative w-full md:w-1/2">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Cari transaksi atau kategori..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-700 text-sm rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+            />
+          </div>
+
+          {/* Dropdown Filters */}
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full md:w-auto">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <Filter className="w-4 h-4 text-slate-400 hidden sm:block" />
+              
+              {/* Filter Bulan */}
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="bg-slate-900 border border-slate-700 text-sm rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors w-full sm:w-auto"
+              >
+                <option value="all">Semua Bulan</option>
+                {MONTHS.map((m) => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+
+              {/* Filter Tahun */}
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(e.target.value)}
+                className="bg-slate-900 border border-slate-700 text-sm rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors w-full sm:w-auto"
+              >
+                <option value="all">Semua Tahun</option>
+                {availableYears.map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Reset Filter Button */}
+            {(searchTerm || selectedMonth !== 'all' || selectedYear !== 'all') && (
+              <button
+                onClick={resetFilters}
+                className="flex items-center gap-1 text-xs text-rose-400 hover:text-rose-300 bg-rose-500/10 px-3 py-2.5 rounded-xl border border-rose-500/20 transition-all"
+                title="Reset Filter"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Reset
+              </button>
+            )}
+          </div>
+        </div>
 
         {/* Ringkasan Saldo Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -197,7 +308,7 @@ function App() {
             
             {pieChartData.length === 0 ? (
               <div className="h-64 flex items-center justify-center text-slate-500 text-sm">
-                Belum ada data pengeluaran
+                Tidak ada data pengeluaran
               </div>
             ) : (
               <div className="h-64">
@@ -235,15 +346,18 @@ function App() {
 
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={barChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <BarChart data={barChartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
                   <XAxis dataKey="name" stroke="#94a3b8" tickLine={false} />
-                  <YAxis stroke="#94a3b8" tickLine={false} tickFormatter={(val) => `Rp${val / 1000}k`} />
+                  <YAxis stroke="#94a3b8" tickLine={false} tickFormatter={(val) => `Rp${val / 1000}k`} width={70} />
                   <Tooltip 
                     formatter={(value) => formatRupiah(value)}
                     contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '0.75rem', color: '#fff' }}
                   />
-                  <Bar dataKey="total" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="total" radius={[8, 8, 0, 0]}>
+                    <Cell fill="#10b981" />
+                    <Cell fill="#ef4444" />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -259,14 +373,16 @@ function App() {
               Riwayat Transaksi
             </h2>
             <span className="text-xs text-slate-400 bg-slate-700/50 px-3 py-1 rounded-full">
-              {transactions.length} Transaksi
+              {filteredTransactions.length} Transaksi Ditemukan
             </span>
           </div>
 
           {loading ? (
             <div className="p-8 text-center text-slate-400">Memuat data transaksi...</div>
-          ) : transactions.length === 0 ? (
-            <div className="p-8 text-center text-slate-400">Belum ada transaksi tercatat.</div>
+          ) : filteredTransactions.length === 0 ? (
+            <div className="p-8 text-center text-slate-400">
+              {transactions.length === 0 ? 'Belum ada transaksi tercatat.' : 'Tidak ada transaksi yang cocok dengan filter.'}
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm text-slate-300">
@@ -280,7 +396,7 @@ function App() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-700/50">
-                  {transactions.map((item) => (
+                  {filteredTransactions.map((item) => (
                     <tr key={item.id} className="hover:bg-slate-700/30 transition-colors">
                       <td className="p-4 whitespace-nowrap text-slate-400 flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-slate-500" />
