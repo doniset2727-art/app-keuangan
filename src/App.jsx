@@ -8,8 +8,24 @@ import {
   Trash2, 
   Receipt, 
   Calendar,
-  X 
+  X,
+  PieChart as PieChartIcon,
+  BarChart2
 } from 'lucide-react'
+import { 
+  ResponsiveContainer, 
+  PieChart, 
+  Pie, 
+  Cell, 
+  Tooltip, 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid 
+} from 'recharts'
+
+const CHART_COLORS = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16']
 
 function App() {
   const [transactions, setTransactions] = useState([])
@@ -77,6 +93,7 @@ function App() {
     }
   }
 
+  // Kalkulasi Saldo
   const totalIncome = transactions
     .filter((t) => t.type === 'income')
     .reduce((acc, curr) => acc + Number(curr.amount), 0)
@@ -96,6 +113,26 @@ function App() {
   }
 
   const filteredCategories = categories.filter((c) => c.type === type)
+
+  // Olah Data untuk Pie Chart (Pengeluaran per Kategori)
+  const expenseByCategory = transactions
+    .filter((t) => t.type === 'expense')
+    .reduce((acc, t) => {
+      const catName = t.categories?.name || 'Tanpa Kategori'
+      acc[catName] = (acc[catName] || 0) + Number(t.amount)
+      return acc
+    }, {})
+
+  const pieChartData = Object.keys(expenseByCategory).map((name) => ({
+    name,
+    value: expenseByCategory[name],
+  }))
+
+  // Olah Data untuk Bar Chart (Perbandingan Pemasukan vs Pengeluaran)
+  const barChartData = [
+    { name: 'Pemasukan', total: totalIncome, fill: '#10b981' },
+    { name: 'Pengeluaran', total: totalExpense, fill: '#ef4444' },
+  ]
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-8">
@@ -121,7 +158,6 @@ function App() {
 
         {/* Ringkasan Saldo Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Card Total Saldo */}
           <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700/50 shadow-md">
             <div className="flex justify-between items-center text-slate-400 mb-2">
               <span className="text-xs font-semibold uppercase tracking-wider">Total Saldo</span>
@@ -132,7 +168,6 @@ function App() {
             </p>
           </div>
 
-          {/* Card Pemasukan */}
           <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700/50 shadow-md">
             <div className="flex justify-between items-center text-slate-400 mb-2">
               <span className="text-xs font-semibold uppercase tracking-wider">Pemasukan</span>
@@ -141,7 +176,6 @@ function App() {
             <p className="text-2xl font-bold text-emerald-400">{formatRupiah(totalIncome)}</p>
           </div>
 
-          {/* Card Pengeluaran */}
           <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700/50 shadow-md">
             <div className="flex justify-between items-center text-slate-400 mb-2">
               <span className="text-xs font-semibold uppercase tracking-wider">Pengeluaran</span>
@@ -149,6 +183,72 @@ function App() {
             </div>
             <p className="text-2xl font-bold text-rose-400">{formatRupiah(totalExpense)}</p>
           </div>
+        </div>
+
+        {/* Visualisasi Grafik Section */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          
+          {/* Pie Chart: Pengeluaran Per Kategori */}
+          <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700/50 shadow-xl flex flex-col justify-between">
+            <h3 className="text-base font-semibold text-white flex items-center gap-2 mb-4">
+              <PieChartIcon className="w-5 h-5 text-rose-400" />
+              Pengeluaran per Kategori
+            </h3>
+            
+            {pieChartData.length === 0 ? (
+              <div className="h-64 flex items-center justify-center text-slate-500 text-sm">
+                Belum ada data pengeluaran
+              </div>
+            ) : (
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={pieChartData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={80}
+                      paddingAngle={5}
+                      dataKey="value"
+                    >
+                      {pieChartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      formatter={(value) => formatRupiah(value)}
+                      contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '0.75rem', color: '#fff' }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+
+          {/* Bar Chart: Pemasukan vs Pengeluaran */}
+          <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700/50 shadow-xl flex flex-col justify-between">
+            <h3 className="text-base font-semibold text-white flex items-center gap-2 mb-4">
+              <BarChart2 className="w-5 h-5 text-blue-400" />
+              Perbandingan Arus Kas
+            </h3>
+
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={barChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                  <XAxis dataKey="name" stroke="#94a3b8" tickLine={false} />
+                  <YAxis stroke="#94a3b8" tickLine={false} tickFormatter={(val) => `Rp${val / 1000}k`} />
+                  <Tooltip 
+                    formatter={(value) => formatRupiah(value)}
+                    contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '0.75rem', color: '#fff' }}
+                  />
+                  <Bar dataKey="total" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
         </div>
 
         {/* Tabel Riwayat Transaksi */}
