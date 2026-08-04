@@ -1,71 +1,59 @@
 import React from 'react';
-import { LayoutDashboard, ArrowRightLeft, Plus, Receipt, Wallet } from 'lucide-react';
+import { NavLink } from 'react-router-dom';
+import { LayoutGrid, ArrowLeftRight, Plus, ReceiptText, WalletCards } from 'lucide-react';
 
-export default function BottomNav({ activeTab, setActiveTab, onOpenAddModal }) {
-  const navItemsLeft = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'transaksi', label: 'Transaksi', icon: ArrowRightLeft },
-  ];
-
-  const navItemsRight = [
-    { id: 'tagihan', label: 'Tagihan', icon: Receipt },
-    { id: 'dompet', label: 'Dompet', icon: Wallet },
-  ];
-
+export default function BottomNav() {
   return (
-    /* Tambahkan md:hidden di sini agar otomatis tersembunyi di Desktop/Laptop */
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#1a1a1a] border-t border-[#2a2a2a] px-2 py-2 flex justify-between items-center text-[10px] z-40">
-      
-      {/* Navigasi Kiri: Dashboard & Transaksi */}
-      <div className="flex flex-1 justify-around">
-        {navItemsLeft.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeTab === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`flex flex-col items-center gap-1 w-16 transition-colors ${
-                isActive ? 'text-white font-medium' : 'text-gray-500 hover:text-gray-400'
-              }`}
-            >
-              <Icon className="w-6 h-6" strokeWidth={isActive ? 2.5 : 2} />
-              <span>{item.label}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Tombol Plus (+) Menjolok di Tengah */}
-      <div className="relative -top-6 flex-shrink-0 mx-2">
-        <button
-          onClick={onOpenAddModal}
-          className="bg-blue-500 hover:bg-blue-600 text-white w-14 h-14 rounded-full shadow-lg transition-transform active:scale-95 flex items-center justify-center border-4 border-[#121212]"
+    <div className="fixed bottom-0 left-0 right-0 z-40 bg-slate-950/90 border-t border-slate-800/80 backdrop-blur-xl px-4 py-2 block lg:hidden shadow-2xl">
+      <div className="flex justify-around items-center max-w-md mx-auto relative">
+        
+        {/* Menu Dashboard */}
+        <NavLink 
+          to="/" 
+          className={({ isActive }) => `flex flex-col items-center gap-1 transition-colors ${isActive ? 'text-blue-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
         >
-          <Plus className="w-8 h-8" strokeWidth={2.5} />
-        </button>
-      </div>
+          <LayoutGrid className="w-5 h-5" />
+          <span className="text-[10px]">Dashboard</span>
+        </NavLink>
 
-      {/* Navigasi Kanan: Tagihan & Dompet */}
-      <div className="flex flex-1 justify-around">
-        {navItemsRight.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeTab === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`flex flex-col items-center gap-1 w-16 transition-colors ${
-                isActive ? 'text-white font-medium' : 'text-gray-500 hover:text-gray-400'
-              }`}
-            >
-              <Icon className="w-6 h-6" strokeWidth={isActive ? 2.5 : 2} />
-              <span>{item.label}</span>
-            </button>
-          );
-        })}
-      </div>
+        {/* Menu Transaksi */}
+        <NavLink 
+          to="/transactions" 
+          className={({ isActive }) => `flex flex-col items-center gap-1 transition-colors ${isActive ? 'text-blue-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+        >
+          <ArrowLeftRight className="w-5 h-5" />
+          <span className="text-[10px]">Transaksi</span>
+        </NavLink>
 
-    </nav>
+        {/* Tombol Utama (+) di Tengah */}
+        <div className="relative -top-5">
+          <NavLink 
+            to="/transactions" 
+            className="w-14 h-14 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-500 text-white flex items-center justify-center shadow-lg shadow-blue-500/50 hover:scale-105 active:scale-95 transition-all border-4 border-slate-950"
+          >
+            <Plus className="w-7 h-7" />
+          </NavLink>
+        </div>
+
+        {/* Menu Tagihan */}
+        <NavLink 
+          to="/bills" 
+          className={({ isActive }) => `flex flex-col items-center gap-1 transition-colors ${isActive ? 'text-blue-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+        >
+          <ReceiptText className="w-5 h-5" />
+          <span className="text-[10px]">Tagihan</span>
+        </NavLink>
+
+        {/* Menu Dompet */}
+        <NavLink 
+          to="/wallets" 
+          className={({ isActive }) => `flex flex-col items-center gap-1 transition-colors ${isActive ? 'text-blue-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+        >
+          <WalletCards className="w-5 h-5" />
+          <span className="text-[10px]">Dompet</span>
+        </NavLink>
+
+      </div>
+    </div>
   );
 }

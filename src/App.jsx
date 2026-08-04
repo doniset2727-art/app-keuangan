@@ -5,6 +5,7 @@ import TransactionsView from './views/TransactionsView';
 import WalletView from './views/WalletView';
 import BillsView from './views/BillsView';
 import SettingsView from './views/SettingsView';
+import Sidebar from './components/common/Sidebar'; // Sesuaikan path folder Sidebar Anda jika berbeda
 import BottomNav from './components/common/BottomNav';
 
 export default function App() {
@@ -12,6 +13,11 @@ export default function App() {
     <Router>
       <div className="min-h-screen bg-[#0b0f19] text-white selection:bg-blue-500 selection:text-white flex flex-col md:flex-row">
         
+        {/* Sidebar khusus Desktop (Tampil di layar medium ke atas) */}
+        <div className="hidden md:block">
+          <Sidebar />
+        </div>
+
         {/* Area Konten Utama */}
         <div className="flex-1 min-w-0">
           <Routes>
